@@ -24,9 +24,7 @@ def remove_punctuation(input_string):
     # Make a translator object to remove all punctuation
     translator = str.maketrans("", "", string.punctuation)
 
-    # Use the translator object to remove the punctuation
-    no_punct = input_string.translate(translator)
-    return no_punct
+    return input_string.translate(translator)
 
 
 def read_texts(input_file, min_length, max_length, english_only):
@@ -122,10 +120,10 @@ def run_agg_cluster(embeddings, num_clusters):
     for i, c in enumerate(classes):
         new_labels[labels == c] = i
 
-    # Compute centers
-    centers = []
-    for i in range(len(classes)):
-        centers.append(embeddings[new_labels == i].mean(axis=0, keepdim=True))
+    centers = [
+        embeddings[new_labels == i].mean(axis=0, keepdim=True)
+        for i in range(len(classes))
+    ]
     centers = torch.cat(centers)
     return centers, new_labels
 
@@ -145,10 +143,10 @@ def run_hdbscan_cluster(embeddings):
     for i, c in enumerate(classes):
         new_labels[labels == c] = i
 
-    # Compute centers
-    centers = []
-    for i in range(len(classes)):
-        centers.append(embeddings[new_labels == i].mean(axis=0, keepdim=True))
+    centers = [
+        embeddings[new_labels == i].mean(axis=0, keepdim=True)
+        for i in range(len(classes))
+    ]
     centers = torch.cat(centers)
     return centers, new_labels
 
@@ -176,7 +174,7 @@ def print_topk(texts, labels, topk_indices, show_cut_off):
 
         ret += "=" * 20 + f" cluster {k}, #samples: {num_samples} " + "=" * 20 + "\n"
         for idx in topk_indices[k]:
-            ret += "PROMPT: " + texts[idx][:show_cut_off] + "\n"
+            ret += f"PROMPT: {texts[idx][:show_cut_off]}" + "\n"
         ret += "=" * 40 + "\n\n"
 
     return ret
@@ -188,12 +186,8 @@ def get_cluster_info(texts, labels, topk_indices):
     cluster_info = []
     for k in range(len(topk_indices)):
         num_samples = torch.sum(labels == k).item()
-        topk_prompts = []
-        for idx in topk_indices[k]:
-            topk_prompts.append(texts[idx])
-        random_prompts = []
-        for idx in range(len(topk_indices)):
-            random_prompts.append(np.random.choice(texts))
+        topk_prompts = [texts[idx] for idx in topk_indices[k]]
+        random_prompts = [np.random.choice(texts) for _ in range(len(topk_indices))]
         cluster_info.append((num_samples, topk_prompts, random_prompts))
 
     return cluster_info
@@ -246,10 +240,10 @@ if __name__ == "__main__":
     # Dump results
     filename_prefix = f"results_c{num_clusters}_{args.cluster_alg}"
     print(topk_str)
-    with open(filename_prefix + "_topk.txt", "w") as fout:
+    with open(f"{filename_prefix}_topk.txt", "w") as fout:
         fout.write(topk_str)
 
-    with open(filename_prefix + "_all.txt", "w") as fout:
+    with open(f"{filename_prefix}_all.txt", "w") as fout:
         for i in range(len(centers)):
             tmp_indices = labels == i
             tmp_embeddings = embeddings[tmp_indices]
@@ -263,5 +257,5 @@ if __name__ == "__main__":
                 fout.write(json.dumps(obj, ensure_ascii=False) + "\n")
 
     cluster_info = get_cluster_info(texts, labels, topk_indices)
-    with open(filename_prefix + "_cluster.pkl", "wb") as fout:
+    with open(f"{filename_prefix}_cluster.pkl", "wb") as fout:
         pickle.dump(cluster_info, fout)

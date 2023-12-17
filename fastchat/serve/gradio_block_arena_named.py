@@ -70,7 +70,7 @@ def vote_last_response(states, vote_type, model_selectors, request: gr.Request):
         data = {
             "tstamp": round(time.time(), 4),
             "type": vote_type,
-            "models": [x for x in model_selectors],
+            "models": list(model_selectors),
             "states": [x.dict() for x in states],
             "ip": get_ip(request),
         }
@@ -171,8 +171,7 @@ def add_text(
         )
 
     model_list = [states[i].model_name for i in range(num_sides)]
-    flagged = moderation_filter(text, model_list)
-    if flagged:
+    if flagged := moderation_filter(text, model_list):
         logger.info(f"violate moderation (named). ip: {ip}. text: {text}")
         # overwrite the original text
         text = MODERATION_MSG
@@ -230,18 +229,16 @@ def bot_response_multi(
         return
 
     states = [state0, state1]
-    gen = []
-    for i in range(num_sides):
-        gen.append(
-            bot_response(
-                states[i],
-                temperature,
-                top_p,
-                max_new_tokens,
-                request,
-            )
+    gen = [
+        bot_response(
+            states[i],
+            temperature,
+            top_p,
+            max_new_tokens,
+            request,
         )
-
+        for i in range(num_sides)
+    ]
     chatbots = [None] * num_sides
     while True:
         stop = True
@@ -306,9 +303,7 @@ def build_side_by_side_ui_named(models):
             for i in range(num_sides):
                 label = "Model A" if i == 0 else "Model B"
                 with gr.Column():
-                    chatbots[i] = gr.Chatbot(
-                        label=label, elem_id=f"chatbot", height=550
-                    )
+                    chatbots[i] = gr.Chatbot(label=label, elem_id="chatbot", height=550)
 
         with gr.Row():
             leftvote_btn = gr.Button(

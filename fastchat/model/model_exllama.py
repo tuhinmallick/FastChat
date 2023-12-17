@@ -41,18 +41,12 @@ def generate_stream_exllama(
     generator.begin_stream(input_ids, settings)
 
     generated_tokens = 0
-    if echo:
-        output = prompt
-    else:
-        output = ""
+    output = prompt if echo else ""
     while True:
         chunk, eos, _ = generator.stream()
         output += chunk
         generated_tokens += 1
-        if generated_tokens == max_new_tokens:
-            finish_reason = "length"
-            break
-        elif eos:
+        if generated_tokens == max_new_tokens or eos:
             finish_reason = "length"
             break
         yield {

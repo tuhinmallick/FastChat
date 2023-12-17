@@ -37,10 +37,10 @@ def main(args):
     inputs = tokenizer([prompt], return_tensors="pt").to(args.device)
     output_ids = model.generate(
         **inputs,
-        do_sample=True if args.temperature > 1e-5 else False,
+        do_sample=args.temperature > 1e-5,
         temperature=args.temperature,
         repetition_penalty=args.repetition_penalty,
-        max_new_tokens=args.max_new_tokens,
+        max_new_tokens=args.max_new_tokens
     )
 
     if model.config.is_encoder_decoder:

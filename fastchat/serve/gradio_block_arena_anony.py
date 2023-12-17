@@ -67,24 +67,24 @@ def vote_last_response(states, vote_type, model_selectors, request: gr.Request):
         data = {
             "tstamp": round(time.time(), 4),
             "type": vote_type,
-            "models": [x for x in model_selectors],
+            "models": list(model_selectors),
             "states": [x.dict() for x in states],
             "ip": get_ip(request),
         }
         fout.write(json.dumps(data) + "\n")
 
     if ":" not in model_selectors[0]:
-        for i in range(15):
+        for _ in range(15):
             names = (
-                "### Model A: " + states[0].model_name,
-                "### Model B: " + states[1].model_name,
+                f"### Model A: {states[0].model_name}",
+                f"### Model B: {states[1].model_name}",
             )
             yield names + ("",) + (disable_btn,) * 4
             time.sleep(0.2)
     else:
         names = (
-            "### Model A: " + states[0].model_name,
-            "### Model B: " + states[1].model_name,
+            f"### Model A: {states[0].model_name}",
+            f"### Model B: {states[1].model_name}",
         )
         yield names + ("",) + (disable_btn,) * 4
 
@@ -93,40 +93,48 @@ def leftvote_last_response(
     state0, state1, model_selector0, model_selector1, request: gr.Request
 ):
     logger.info(f"leftvote (anony). ip: {get_ip(request)}")
-    for x in vote_last_response(
-        [state0, state1], "leftvote", [model_selector0, model_selector1], request
-    ):
-        yield x
+    yield from vote_last_response(
+        [state0, state1],
+        "leftvote",
+        [model_selector0, model_selector1],
+        request,
+    )
 
 
 def rightvote_last_response(
     state0, state1, model_selector0, model_selector1, request: gr.Request
 ):
     logger.info(f"rightvote (anony). ip: {get_ip(request)}")
-    for x in vote_last_response(
-        [state0, state1], "rightvote", [model_selector0, model_selector1], request
-    ):
-        yield x
+    yield from vote_last_response(
+        [state0, state1],
+        "rightvote",
+        [model_selector0, model_selector1],
+        request,
+    )
 
 
 def tievote_last_response(
     state0, state1, model_selector0, model_selector1, request: gr.Request
 ):
     logger.info(f"tievote (anony). ip: {get_ip(request)}")
-    for x in vote_last_response(
-        [state0, state1], "tievote", [model_selector0, model_selector1], request
-    ):
-        yield x
+    yield from vote_last_response(
+        [state0, state1],
+        "tievote",
+        [model_selector0, model_selector1],
+        request,
+    )
 
 
 def bothbad_vote_last_response(
     state0, state1, model_selector0, model_selector1, request: gr.Request
 ):
     logger.info(f"bothbad_vote (anony). ip: {get_ip(request)}")
-    for x in vote_last_response(
-        [state0, state1], "bothbad_vote", [model_selector0, model_selector1], request
-    ):
-        yield x
+    yield from vote_last_response(
+        [state0, state1],
+        "bothbad_vote",
+        [model_selector0, model_selector1],
+        request,
+    )
 
 
 def regenerate(state0, state1, request: gr.Request):
@@ -288,7 +296,7 @@ def get_battle_pair():
         weight = get_sample_weight(model)
         model_weights.append(weight)
     total_weight = np.sum(model_weights)
-    model_weights = model_weights / total_weight
+    model_weights /= total_weight
     chosen_idx = np.random.choice(len(models), p=model_weights)
     chosen_model = models[chosen_idx]
 
@@ -309,7 +317,7 @@ def get_battle_pair():
         rival_weights.append(weight)
     # for p, w in zip(rival_models, rival_weights):
     #     print(p, w)
-    rival_weights = rival_weights / np.sum(rival_weights)
+    rival_weights /= np.sum(rival_weights)
     rival_idx = np.random.choice(len(rival_models), p=rival_weights)
     rival_model = rival_models[rival_idx]
 
@@ -353,8 +361,7 @@ def add_text(
         )
 
     model_list = [states[i].model_name for i in range(num_sides)]
-    flagged = moderation_filter(text, model_list)
-    if flagged:
+    if flagged := moderation_filter(text, model_list):
         logger.info(f"violate moderation (anony). ip: {ip}. text: {text}")
         # overwrite the original text
         text = MODERATION_MSG
@@ -418,18 +425,16 @@ def bot_response_multi(
         return
 
     states = [state0, state1]
-    gen = []
-    for i in range(num_sides):
-        gen.append(
-            bot_response(
-                states[i],
-                temperature,
-                top_p,
-                max_new_tokens,
-                request,
-            )
+    gen = [
+        bot_response(
+            states[i],
+            temperature,
+            top_p,
+            max_new_tokens,
+            request,
         )
-
+        for i in range(num_sides)
+    ]
     chatbots = [None] * num_sides
     while True:
         stop = True
@@ -477,9 +482,7 @@ Find out who is the 🥇LLM Champion!
             for i in range(num_sides):
                 label = "Model A" if i == 0 else "Model B"
                 with gr.Column():
-                    chatbots[i] = gr.Chatbot(
-                        label=label, elem_id=f"chatbot", height=550
-                    )
+                    chatbots[i] = gr.Chatbot(label=label, elem_id="chatbot", height=550)
 
         with gr.Row():
             for i in range(num_sides):

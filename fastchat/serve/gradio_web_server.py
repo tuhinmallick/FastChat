@@ -117,17 +117,16 @@ def set_global_vars(controller_url_, enable_moderation_):
 
 def get_conv_log_filename():
     t = datetime.datetime.now()
-    name = os.path.join(LOGDIR, f"{t.year}-{t.month:02d}-{t.day:02d}-conv.json")
-    return name
+    return os.path.join(LOGDIR, f"{t.year}-{t.month:02d}-{t.day:02d}-conv.json")
 
 
 def get_model_list(
     controller_url, register_openai_compatible_models, add_chatgpt, add_claude, add_palm
 ):
     if controller_url:
-        ret = requests.post(controller_url + "/refresh_all_workers")
+        ret = requests.post(f"{controller_url}/refresh_all_workers")
         assert ret.status_code == 200
-        ret = requests.post(controller_url + "/list_models")
+        ret = requests.post(f"{controller_url}/list_models")
         models = ret.json()["models"]
     else:
         models = []
@@ -241,11 +240,11 @@ def clear_history(request: gr.Request):
 
 
 def get_ip(request: gr.Request):
-    if "cf-connecting-ip" in request.headers:
-        ip = request.headers["cf-connecting-ip"]
-    else:
-        ip = request.client.host
-    return ip
+    return (
+        request.headers["cf-connecting-ip"]
+        if "cf-connecting-ip" in request.headers
+        else request.client.host
+    )
 
 
 def add_text(state, model_selector, text, request: gr.Request):
@@ -259,8 +258,7 @@ def add_text(state, model_selector, text, request: gr.Request):
         state.skip_next = True
         return (state, state.to_gradio_chatbot(), "") + (no_change_btn,) * 5
 
-    flagged = moderation_filter(text, [state.model_name])
-    if flagged:
+    if flagged := moderation_filter(text, [state.model_name]):
         logger.info(f"violate moderation. ip: {ip}. text: {text}")
         # overwrite the original text
         text = MODERATION_MSG
@@ -316,7 +314,7 @@ def model_worker_stream_iter(
 
     # Stream output
     response = requests.post(
-        worker_addr + "/worker_generate_stream",
+        f"{worker_addr}/worker_generate_stream",
         headers=headers,
         json=gen_params,
         stream=True,
@@ -324,8 +322,7 @@ def model_worker_stream_iter(
     )
     for chunk in response.iter_lines(decode_unicode=False, delimiter=b"\0"):
         if chunk:
-            data = json.loads(chunk.decode())
-            yield data
+            yield json.loads(chunk.decode())
 
 
 def bot_response(state, temperature, top_p, max_new_tokens, request: gr.Request):
@@ -374,7 +371,7 @@ def bot_response(state, temperature, top_p, max_new_tokens, request: gr.Request)
     else:
         # Query worker address
         ret = requests.post(
-            controller_url + "/get_worker_address", json={"model": model_name}
+            f"{controller_url}/get_worker_address", json={"model": model_name}
         )
         worker_addr = ret.json()["address"]
         logger.info(f"model_name: {model_name}, worker_addr: {worker_addr}")
@@ -398,11 +395,7 @@ def bot_response(state, temperature, top_p, max_new_tokens, request: gr.Request)
         prompt = conv.get_prompt()
 
         # Set repetition_penalty
-        if "t5" in model_name:
-            repetition_penalty = 1.2
-        else:
-            repetition_penalty = 1.0
-
+        repetition_penalty = 1.2 if "t5" in model_name else 1.0
         stream_iter = model_worker_stream_iter(
             conv,
             model_name,
@@ -418,10 +411,10 @@ def bot_response(state, temperature, top_p, max_new_tokens, request: gr.Request)
     yield (state, state.to_gradio_chatbot()) + (disable_btn,) * 5
 
     try:
-        for i, data in enumerate(stream_iter):
+        for data in stream_iter:
             if data["error_code"] == 0:
                 output = data["text"].strip()
-                conv.update_last_message(output + "▌")
+                conv.update_last_message(f"{output}▌")
                 yield (state, state.to_gradio_chatbot()) + (disable_btn,) * 5
             else:
                 output = data["text"] + f"\n\n(error_code: {data['error_code']})"
@@ -552,7 +545,7 @@ def get_model_description_md(models):
 """
     ct = 0
     visited = set()
-    for i, name in enumerate(models):
+    for name in models:
         minfo = get_model_info(name)
         if minfo.simple_name in visited:
             continue
@@ -569,7 +562,7 @@ def get_model_description_md(models):
 
 
 def build_about():
-    about_markdown = f"""
+    about_markdown = """
 # About Us
 Chatbot Arena is an open-source research project developed by members from [LMSYS](https://lmsys.org/about/) and UC Berkeley [SkyLab](https://sky.cs.berkeley.edu/).  Our mission is to build an open crowdsourced platform to collect human feedback and evaluate LLMs under real-world scenarios. We open-source our [FastChat](https://github.com/lm-sys/FastChat) project at GitHub and release chat and human feedback datasets [here](https://github.com/lm-sys/FastChat/blob/main/docs/dataset_release.md). We invite everyone to join us in this journey!
 

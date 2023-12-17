@@ -216,14 +216,9 @@ def string_args(args, args_list):
         key = key.split("-")[-1] if re.search("port|host", key) else key
         if not value:
             pass
-        # 1==True ->  True
         elif isinstance(value, bool) and value == True:
             args_str += f" --{key} "
-        elif (
-            isinstance(value, list)
-            or isinstance(value, tuple)
-            or isinstance(value, set)
-        ):
+        elif isinstance(value, (list, tuple, set)):
             value = " ".join(value)
             args_str += f" --{key} {value} "
         else:

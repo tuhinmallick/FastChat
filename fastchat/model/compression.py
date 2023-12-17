@@ -80,8 +80,7 @@ def get_compressed_list(module, prefix=""):
             compressed_list.append(full_name)
     for name, child in module.named_children():
         child_prefix = f"{prefix}.{name}" if prefix else name
-        for each in get_compressed_list(child, child_prefix):
-            compressed_list.append(each)
+        compressed_list.extend(iter(get_compressed_list(child, child_prefix)))
     return compressed_list
 
 
@@ -139,10 +138,7 @@ def load_compress_model(model_path, device, torch_dtype, use_fast, revision="mai
         except NameError:
             model = AutoModel.from_config(config, trust_remote_code=True)
         linear_weights = get_compressed_list(model)
-    if os.path.exists(model_path):
-        # `model_path` is a local folder
-        base_pattern = os.path.join(model_path, "pytorch_model*.bin")
-    else:
+    if not os.path.exists(model_path):
         # `model_path` is a cached Hugging Face repo
         # We don't necessarily need to download the model' repo again if there is a cache.
         # So check the default huggingface cache first.
@@ -158,22 +154,22 @@ def load_compress_model(model_path, device, torch_dtype, use_fast, revision="mai
             model_path_temp = os.path.join(model_path_temp, temp_last_dir)
             base_pattern = os.path.join(model_path_temp, "pytorch_model*.bin")
             files = glob.glob(base_pattern)
-            if len(files) > 0:
+            if files:
                 downloaded = True
 
         if downloaded:
             model_path = model_path_temp
         else:
             model_path = snapshot_download(model_path, revision=revision)
-        base_pattern = os.path.join(model_path, "pytorch_model*.bin")
-
+    # `model_path` is a local folder
+    base_pattern = os.path.join(model_path, "pytorch_model*.bin")
     files = glob.glob(base_pattern)
     use_safetensors = False
-    if len(files) == 0:
+    if not files:
         base_pattern = os.path.join(model_path, "*.safetensors")
         files = glob.glob(base_pattern)
         use_safetensors = True
-    if len(files) == 0:
+    if not files:
         raise ValueError(
             f"Cannot find any model weight files. "
             f"Please check your (cached) weight path: {model_path}"
@@ -297,9 +293,10 @@ def decompress(packed_data, config):
         data = data / scale
         data.add_(mn)
 
-    # Unpad
-    pad_len = (group_size - original_shape[group_dim] % group_size) % group_size
-    if pad_len:
+    if (
+        pad_len := (group_size - original_shape[group_dim] % group_size)
+        % group_size
+    ):
         padded_original_shape = (
             original_shape[:group_dim]
             + (original_shape[group_dim] + pad_len,)
