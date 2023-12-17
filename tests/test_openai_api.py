@@ -15,8 +15,7 @@ openai.api_base = "http://localhost:8000/v1"
 
 def test_list_models():
     model_list = openai.Model.list()
-    names = [x["id"] for x in model_list["data"]]
-    return names
+    return [x["id"] for x in model_list["data"]]
 
 
 def test_completion(model, logprob):
@@ -124,11 +123,7 @@ if __name__ == "__main__":
     for model in models:
         print(f"===== Test {model} ======")
 
-        if model in ["fastchat-t5-3b-v1.0"]:
-            logprob = None
-        else:
-            logprob = 1
-
+        logprob = None if model in ["fastchat-t5-3b-v1.0"] else 1
         test_completion(model, logprob)
         test_completion_stream(model)
         test_chat_completion(model)

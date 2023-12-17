@@ -131,17 +131,17 @@ def generate_stream(
             else:
                 out = model(input_ids=start_ids, use_cache=True)
                 logits = out.logits
-            past_key_values = out.past_key_values
-
             if logprobs is not None:
                 # Prefull logprobs for the prompt.
                 shift_input_ids = start_ids[..., 1:].contiguous()
                 shift_logits = logits[..., :-1, :].contiguous()
                 shift_logits = torch.log_softmax(shift_logits, dim=-1).tolist()
-                for label_id, logit in zip(
-                    shift_input_ids[0].tolist(), shift_logits[0]
-                ):
-                    token_logprobs.append(logit[label_id])
+                token_logprobs.extend(
+                    logit[label_id]
+                    for label_id, logit in zip(
+                        shift_input_ids[0].tolist(), shift_logits[0]
+                    )
+                )
         else:  # decoding
             if model.config.is_encoder_decoder:
                 out = model.decoder(
@@ -153,8 +153,6 @@ def generate_stream(
                     use_cache=True,
                     past_key_values=past_key_values if not sent_interrupt else None,
                 )
-                sent_interrupt = False
-
                 logits = model.lm_head(out[0])
             else:
                 out = model(
@@ -165,9 +163,10 @@ def generate_stream(
                     use_cache=True,
                     past_key_values=past_key_values if not sent_interrupt else None,
                 )
-                sent_interrupt = False
                 logits = out.logits
-            past_key_values = out.past_key_values
+            sent_interrupt = False
+
+        past_key_values = out.past_key_values
 
         if logits_processor:
             if repetition_penalty > 1.0:
@@ -197,11 +196,7 @@ def generate_stream(
                 torch.log_softmax(logits[0, -1, :], dim=-1)[token].tolist()
             )
 
-        if token in stop_token_ids:
-            stopped = True
-        else:
-            stopped = False
-
+        stopped = token in stop_token_ids
         # Yield the output tokens
         if i % stream_interval == 0 or i == max_new_tokens - 1 or stopped:
             if echo:
@@ -288,7 +283,6 @@ def generate_stream(
         if stopped:
             break
 
-    # Finish stream event, which contains finish reason
     else:
         finish_reason = "length"
 

@@ -46,7 +46,7 @@ def detect_type(conv):
             if not isinstance(msg, str):
                 return TypeCode.BAD_FORMAT
 
-        if len(messages) == 0:
+        if not messages:
             return TypeCode.BAD_FORMAT
 
         user_prompts = [
@@ -96,9 +96,9 @@ if __name__ == "__main__":
 
     type_codes = []
     with ProcessPoolExecutor() as executor:
-        for result in tqdm(executor.map(detect_type, convs), total=len(convs)):
-            type_codes.append(result)
-
+        type_codes.extend(
+            iter(tqdm(executor.map(detect_type, convs), total=len(convs)))
+        )
     new_convs = []
     for conv, type_code in zip(convs, type_codes):
         if type_code == TypeCode.BAD_FORMAT:

@@ -108,23 +108,22 @@ get_bearer_token = HTTPBearer(auto_error=False)
 async def check_api_key(
     auth: Optional[HTTPAuthorizationCredentials] = Depends(get_bearer_token),
 ) -> str:
-    if app_settings.api_keys:
-        if auth is None or (token := auth.credentials) not in app_settings.api_keys:
-            raise HTTPException(
-                status_code=401,
-                detail={
-                    "error": {
-                        "message": "",
-                        "type": "invalid_request_error",
-                        "param": None,
-                        "code": "invalid_api_key",
-                    }
-                },
-            )
-        return token
-    else:
+    if not app_settings.api_keys:
         # api_keys not set; allow all
         return None
+    if auth is None or (token := auth.credentials) not in app_settings.api_keys:
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "error": {
+                    "message": "",
+                    "type": "invalid_request_error",
+                    "param": None,
+                    "code": "invalid_api_key",
+                }
+            },
+        )
+    return token
 
 
 def create_error_response(code: int, message: str) -> JSONResponse:
@@ -140,15 +139,17 @@ async def validation_exception_handler(request, exc):
 
 async def check_model(request) -> Optional[JSONResponse]:
     controller_address = app_settings.controller_address
-    ret = None
-
-    models = await fetch_remote(controller_address + "/list_models", None, "models")
-    if request.model not in models:
-        ret = create_error_response(
+    models = await fetch_remote(
+        f"{controller_address}/list_models", None, "models"
+    )
+    return (
+        create_error_response(
             ErrorCode.INVALID_MODEL,
             f"Only {'&&'.join(models)} allowed now, your model {request.model}",
         )
-    return ret
+        if request.model not in models
+        else None
+    )
 
 
 async def check_length(request, prompt, max_tokens, worker_addr):
@@ -158,10 +159,12 @@ async def check_length(request, prompt, max_tokens, worker_addr):
         max_tokens = 1024 * 1024
 
     context_len = await fetch_remote(
-        worker_addr + "/model_details", {"model": request.model}, "context_length"
+        f"{worker_addr}/model_details",
+        {"model": request.model},
+        "context_length",
     )
     token_num = await fetch_remote(
-        worker_addr + "/count_token",
+        f"{worker_addr}/count_token",
         {"model": request.model, "prompt": prompt},
         "count",
     )
@@ -213,15 +216,13 @@ def check_requests(request) -> Optional[JSONResponse]:
             ErrorCode.PARAM_OUT_OF_RANGE,
             f"{request.top_k} is out of Range. Either set top_k to -1 or >=1.",
         )
-    if request.stop is not None and (
-        not isinstance(request.stop, str) and not isinstance(request.stop, list)
-    ):
+    if request.stop is None or isinstance(request.stop, (str, list)):
+        return None
+    else:
         return create_error_response(
             ErrorCode.PARAM_OUT_OF_RANGE,
             f"{request.stop} is not valid under any of the given schemas - 'stop'",
         )
-
-    return None
 
 
 def process_input(model_name, inp):
@@ -317,9 +318,9 @@ async def get_gen_params(
     }
 
     if best_of is not None:
-        gen_params.update({"best_of": best_of})
+        gen_params["best_of"] = best_of
     if use_beam_search is not None:
-        gen_params.update({"use_beam_search": use_beam_search})
+        gen_params["use_beam_search"] = use_beam_search
 
     new_stop = set()
     _add_to_set(stop, new_stop)
@@ -341,7 +342,9 @@ async def get_worker_address(model_name: str) -> str:
     """
     controller_address = app_settings.controller_address
     worker_addr = await fetch_remote(
-        controller_address + "/get_worker_address", {"model": model_name}, "address"
+        f"{controller_address}/get_worker_address",
+        {"model": model_name},
+        "address",
     )
 
     # No available worker
@@ -355,7 +358,9 @@ async def get_conv(model_name: str, worker_addr: str):
     conv_template = conv_template_map.get((worker_addr, model_name))
     if conv_template is None:
         conv_template = await fetch_remote(
-            worker_addr + "/worker_get_conv_template", {"model": model_name}, "conv"
+            f"{worker_addr}/worker_get_conv_template",
+            {"model": model_name},
+            "conv",
         )
         conv_template_map[(worker_addr, model_name)] = conv_template
     return conv_template
@@ -364,14 +369,15 @@ async def get_conv(model_name: str, worker_addr: str):
 @app.get("/v1/models", dependencies=[Depends(check_api_key)])
 async def show_available_models():
     controller_address = app_settings.controller_address
-    ret = await fetch_remote(controller_address + "/refresh_all_workers")
-    models = await fetch_remote(controller_address + "/list_models", None, "models")
+    ret = await fetch_remote(f"{controller_address}/refresh_all_workers")
+    models = await fetch_remote(
+        f"{controller_address}/list_models", None, "models"
+    )
 
     models.sort()
-    # TODO: return real model permission details
-    model_cards = []
-    for m in models:
-        model_cards.append(ModelCard(id=m, root=m, permission=[ModelPermission()]))
+    model_cards = [
+        ModelCard(id=m, root=m, permission=[ModelPermission()]) for m in models
+    ]
     return ModelList(data=model_cards)
 
 
@@ -421,7 +427,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
 
     choices = []
     chat_completions = []
-    for i in range(request.n):
+    for _ in range(request.n):
         content = asyncio.create_task(generate_completion(gen_params, worker_addr))
         chat_completions.append(content)
     try:
@@ -549,7 +555,7 @@ async def create_completion(request: CompletionRequest):
                 best_of=request.best_of,
                 use_beam_search=request.use_beam_search,
             )
-            for i in range(request.n):
+            for _ in range(request.n):
                 content = asyncio.create_task(
                     generate_completion(gen_params, worker_addr)
                 )
@@ -645,13 +651,7 @@ async def generate_completion_stream(payload: Dict[str, Any], worker_addr: str):
     controller_address = app_settings.controller_address
     async with httpx.AsyncClient() as client:
         delimiter = b"\0"
-        async with client.stream(
-            "POST",
-            worker_addr + "/worker_generate_stream",
-            headers=headers,
-            json=payload,
-            timeout=WORKER_API_TIMEOUT,
-        ) as response:
+        async with client.stream("POST", f"{worker_addr}/worker_generate_stream", headers=headers, json=payload, timeout=WORKER_API_TIMEOUT) as response:
             # content = await response.aread()
             buffer = b""
             async for raw_chunk in response.aiter_raw():
@@ -664,7 +664,7 @@ async def generate_completion_stream(payload: Dict[str, Any], worker_addr: str):
 
 
 async def generate_completion(payload: Dict[str, Any], worker_addr: str):
-    return await fetch_remote(worker_addr + "/worker_generate", payload, "")
+    return await fetch_remote(f"{worker_addr}/worker_generate", payload, "")
 
 
 @app.post("/v1/embeddings", dependencies=[Depends(check_api_key)])
@@ -720,7 +720,7 @@ async def get_embedding(payload: Dict[str, Any]):
     model_name = payload["model"]
     worker_addr = await get_worker_address(model_name)
 
-    embedding = await fetch_remote(worker_addr + "/worker_get_embeddings", payload)
+    embedding = await fetch_remote(f"{worker_addr}/worker_get_embeddings", payload)
     return json.loads(embedding)
 
 
@@ -738,13 +738,13 @@ async def count_tokens(request: APITokenCheckRequest):
         worker_addr = await get_worker_address(item.model)
 
         context_len = await fetch_remote(
-            worker_addr + "/model_details",
+            f"{worker_addr}/model_details",
             {"prompt": item.prompt, "model": item.model},
             "context_length",
         )
 
         token_num = await fetch_remote(
-            worker_addr + "/count_token",
+            f"{worker_addr}/count_token",
             {"prompt": item.prompt, "model": item.model},
             "count",
         )
@@ -811,7 +811,7 @@ async def create_chat_completion(request: APIChatCompletionRequest):
 
     choices = []
     chat_completions = []
-    for i in range(request.n):
+    for _ in range(request.n):
         content = asyncio.create_task(generate_completion(gen_params, worker_addr))
         chat_completions.append(content)
     try:

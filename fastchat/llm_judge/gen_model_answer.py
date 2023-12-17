@@ -39,19 +39,14 @@ def run_eval(
 
     # Split the question file into `num_gpus` files
     assert num_gpus_total % num_gpus_per_model == 0
-    use_ray = num_gpus_total // num_gpus_per_model > 1
-
-    if use_ray:
-        get_answers_func = ray.remote(num_gpus=num_gpus_per_model)(
-            get_model_answers
-        ).remote
-    else:
-        get_answers_func = get_model_answers
-
-    chunk_size = len(questions) // (num_gpus_total // num_gpus_per_model)
-    ans_handles = []
-    for i in range(0, len(questions), chunk_size):
-        ans_handles.append(
+    if use_ray := num_gpus_total // num_gpus_per_model > 1:
+        get_answers_func = (
+            ray.remote(num_gpus=num_gpus_per_model)(get_model_answers).remote
+            if use_ray
+            else get_model_answers
+        )
+        chunk_size = len(questions) // (num_gpus_total // num_gpus_per_model)
+        ans_handles = [
             get_answers_func(
                 model_path,
                 model_id,
@@ -64,9 +59,8 @@ def run_eval(
                 dtype=dtype,
                 revision=revision,
             )
-        )
-
-    if use_ray:
+            for i in range(0, len(questions), chunk_size)
+        ]
         ray.get(ans_handles)
 
 
@@ -113,11 +107,7 @@ def get_model_answers(
                 prompt = conv.get_prompt()
                 input_ids = tokenizer([prompt]).input_ids
 
-                if temperature < 1e-4:
-                    do_sample = False
-                else:
-                    do_sample = True
-
+                do_sample = temperature >= 1e-4
                 # some models may error out when generating long outputs
                 try:
                     output_ids = model.generate(
@@ -133,30 +123,30 @@ def get_model_answers(
 
                     # be consistent with the template's stop_token_ids
                     if conv.stop_token_ids:
-                        stop_token_ids_index = [
+                        if stop_token_ids_index := [
                             i
                             for i, id in enumerate(output_ids)
                             if id in conv.stop_token_ids
-                        ]
-                        if len(stop_token_ids_index) > 0:
+                        ]:
                             output_ids = output_ids[: stop_token_ids_index[0]]
 
                     output = tokenizer.decode(
                         output_ids,
                         spaces_between_special_tokens=False,
                     )
-                    if conv.stop_str and isinstance(conv.stop_str, list):
-                        stop_str_indices = sorted(
-                            [
-                                output.find(stop_str)
-                                for stop_str in conv.stop_str
-                                if output.find(stop_str) > 0
-                            ]
-                        )
-                        if len(stop_str_indices) > 0:
-                            output = output[: stop_str_indices[0]]
-                    elif conv.stop_str and output.find(conv.stop_str) > 0:
-                        output = output[: output.find(conv.stop_str)]
+                    if conv.stop_str:
+                        if isinstance(conv.stop_str, list):
+                            stop_str_indices = sorted(
+                                [
+                                    output.find(stop_str)
+                                    for stop_str in conv.stop_str
+                                    if output.find(stop_str) > 0
+                                ]
+                            )
+                            if len(stop_str_indices) > 0:
+                                output = output[: stop_str_indices[0]]
+                        elif output.find(conv.stop_str) > 0:
+                            output = output[: output.find(conv.stop_str)]
 
                     for special_token in tokenizer.special_tokens_map.values():
                         if isinstance(special_token, list):

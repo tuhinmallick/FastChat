@@ -47,11 +47,7 @@ def generate_stream_xft(
 
     thread = Thread(target=model.model.generate, kwargs=generation_kwargs)
     thread.start()
-    if echo:
-        # means keep the prompt
-        output = prompt
-    else:
-        output = ""
+    output = prompt if echo else ""
     i = 0
     for i, new_text in enumerate(streamer):
         output += new_text
@@ -65,10 +61,7 @@ def generate_stream_xft(
             "finish_reason": None,
         }
     output = output.strip()
-    if i == max_new_tokens - 1:
-        finish_reason = "length"
-    else:
-        finish_reason = "stop"
+    finish_reason = "length" if i == max_new_tokens - 1 else "stop"
     yield {
         "text": output,
         "usage": {

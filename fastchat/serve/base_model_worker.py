@@ -40,8 +40,7 @@ class BaseModelWorker:
         self.controller_addr = controller_addr
         self.worker_addr = worker_addr
         self.worker_id = worker_id
-        if model_path.endswith("/"):
-            model_path = model_path[:-1]
+        model_path = model_path.removesuffix("/")
         self.model_names = model_names or [model_path.split("/")[-1]]
         self.limit_worker_concurrency = limit_worker_concurrency
         self.conv = self.make_conv_template(conv_template, model_path)
@@ -69,11 +68,11 @@ class BaseModelWorker:
         from fastchat.conversation import get_conv_template
         from fastchat.model.model_adapter import get_conversation_template
 
-        if conv_template:
-            conv = get_conv_template(conv_template)
-        else:
-            conv = get_conversation_template(model_path)
-        return conv
+        return (
+            get_conv_template(conv_template)
+            if conv_template
+            else get_conversation_template(model_path)
+        )
 
     def init_heart_beat(self):
         self.register_to_controller()
@@ -87,7 +86,7 @@ class BaseModelWorker:
     def register_to_controller(self):
         logger.info("Register to controller")
 
-        url = self.controller_addr + "/register_worker"
+        url = f"{self.controller_addr}/register_worker"
         data = {
             "worker_name": self.worker_addr,
             "check_heart_beat": True,
@@ -104,7 +103,7 @@ class BaseModelWorker:
             f"worker_id: {self.worker_id}. "
         )
 
-        url = self.controller_addr + "/receive_heart_beat"
+        url = f"{self.controller_addr}/receive_heart_beat"
 
         while True:
             try:
@@ -155,11 +154,10 @@ class BaseModelWorker:
         except TypeError:
             input_echo_len = self.tokenizer.num_tokens(prompt)
 
-        ret = {
+        return {
             "count": input_echo_len,
             "error_code": 0,
         }
-        return ret
 
     def get_conv_template(self):
         return {"conv": self.conv}

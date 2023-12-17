@@ -66,11 +66,10 @@ def openai_api_stream_iter(
     for chunk in res:
         if len(chunk["choices"]) > 0:
             text += chunk["choices"][0]["delta"].get("content", "")
-            data = {
+            yield {
                 "text": text,
                 "error_code": 0,
             }
-            yield data
 
 
 def anthropic_api_stream_iter(model_name, prompt, temperature, top_p, max_new_tokens):
@@ -100,11 +99,10 @@ def anthropic_api_stream_iter(model_name, prompt, temperature, top_p, max_new_to
     text = ""
     for chunk in res:
         text += chunk.completion
-        data = {
+        yield {
             "text": text,
             "error_code": 0,
         }
-        yield data
 
 
 def init_palm_chat(model_name):
@@ -116,8 +114,7 @@ def init_palm_chat(model_name):
     vertexai.init(project=project_id, location=location)
 
     chat_model = ChatModel.from_pretrained(model_name)
-    chat = chat_model.start_chat(examples=[])
-    return chat
+    return chat_model.start_chat(examples=[])
 
 
 def palm_api_stream_iter(chat, message, temperature, top_p, max_new_tokens):
@@ -142,8 +139,7 @@ def palm_api_stream_iter(chat, message, temperature, top_p, max_new_tokens):
         # with a Poisson process.
         pos += random.randint(10, 20)
         time.sleep(random.expovariate(50))
-        data = {
+        yield {
             "text": content[:pos],
             "error_code": 0,
         }
-        yield data

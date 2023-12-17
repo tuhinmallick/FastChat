@@ -19,9 +19,10 @@ if __name__ == "__main__":
     # Load tags
     print("Load tags...")
     tag_data = json.load(open(tag_file))
-    tag_dict = {}
-    for c in tqdm(tag_data):
-        tag_dict[c["conversation_id"]] = [x["oai_filter"] for x in c["conversation"]]
+    tag_dict = {
+        c["conversation_id"]: [x["oai_filter"] for x in c["conversation"]]
+        for c in tqdm(tag_data)
+    }
     print(f"elapsed: {time.time() - tic:.2f} s")
 
     # Append to input_file

@@ -75,10 +75,9 @@ def get_gen_kwargs(
 
 
 def could_be_stop(text, stop):
-    for s in stop:
-        if any(text.endswith(s[:i]) for i in range(1, len(s) + 1)):
-            return True
-    return False
+    return any(
+        any(text.endswith(s[:i]) for i in range(1, len(s) + 1)) for s in stop
+    )
 
 
 class HuggingfaceApiWorker(BaseModelWorker):
@@ -122,12 +121,10 @@ class HuggingfaceApiWorker(BaseModelWorker):
             self.init_heart_beat()
 
     def count_token(self, params):
-        # No tokenizer here
-        ret = {
+        return {
             "count": 0,
             "error_code": 0,
         }
-        return ret
 
     def generate_stream_gate(self, params):
         self.call_ct += 1
@@ -247,7 +244,7 @@ async def api_get_status(request: Request):
     return {
         "model_names": [m for w in workers for m in w.model_names],
         "speed": 1,
-        "queue_length": sum([w.get_queue_length() for w in workers]),
+        "queue_length": sum(w.get_queue_length() for w in workers),
     }
 
 
@@ -378,14 +375,14 @@ def create_huggingface_api_worker():
             worker_map[name] = m
 
     # register all the models
-    url = args.controller_address + "/register_worker"
+    url = f"{args.controller_address}/register_worker"
     data = {
         "worker_name": workers[0].worker_addr,
         "check_heart_beat": not args.no_register,
         "worker_status": {
             "model_names": [m for w in workers for m in w.model_names],
             "speed": 1,
-            "queue_length": sum([w.get_queue_length() for w in workers]),
+            "queue_length": sum(w.get_queue_length() for w in workers),
         },
     }
     r = requests.post(url, json=data)

@@ -155,7 +155,7 @@ def oai_moderation(text):
     openai.api_version = None
 
     MAX_RETRY = 3
-    for i in range(MAX_RETRY):
+    for _ in range(MAX_RETRY):
         try:
             res = openai.Moderation.create(input=text)
             flagged = res["results"][0]["flagged"]
@@ -279,21 +279,21 @@ def parse_gradio_auth_creds(filename: str):
     """Parse a username:password file for gradio authorization."""
     gradio_auth_creds = []
     with open(filename, "r", encoding="utf8") as file:
-        for line in file.readlines():
+        for line in file:
             gradio_auth_creds += [x.strip() for x in line.split(",") if x.strip()]
-    if gradio_auth_creds:
-        auth = [tuple(cred.split(":")) for cred in gradio_auth_creds]
-    else:
-        auth = None
-    return auth
+    return (
+        [tuple(cred.split(":")) for cred in gradio_auth_creds]
+        if gradio_auth_creds
+        else None
+    )
 
 
 def is_partial_stop(output: str, stop_str: str):
     """Check whether the output contains a partial stop str."""
-    for i in range(0, min(len(output), len(stop_str))):
-        if stop_str.startswith(output[-i:]):
-            return True
-    return False
+    return any(
+        stop_str.startswith(output[-i:])
+        for i in range(0, min(len(output), len(stop_str)))
+    )
 
 
 def run_cmd(cmd: str):
@@ -324,11 +324,7 @@ SEQUENCE_LENGTH_KEYS = [
 def get_context_length(config):
     """Get the context length of a model from a huggingface model config."""
     rope_scaling = getattr(config, "rope_scaling", None)
-    if rope_scaling:
-        rope_scaling_factor = config.rope_scaling["factor"]
-    else:
-        rope_scaling_factor = 1
-
+    rope_scaling_factor = config.rope_scaling["factor"] if rope_scaling else 1
     for key in SEQUENCE_LENGTH_KEYS:
         val = getattr(config, key, None)
         if val is not None:

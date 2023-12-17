@@ -30,7 +30,7 @@ leader_component_values = [None] * 5
 
 
 def make_leaderboard_md(elo_results):
-    leaderboard_md = f"""
+    return f"""
 # 🏆 Chatbot Arena Leaderboard
 | [Blog](https://lmsys.org/blog/2023-05-03-arena/) | [GitHub](https://github.com/lm-sys/FastChat) | [Paper](https://arxiv.org/abs/2306.05685) | [Dataset](https://github.com/lm-sys/FastChat/blob/main/docs/dataset_release.md) | [Twitter](https://twitter.com/lmsysorg) | [Discord](https://discord.gg/HSWAKCrnFx) |
 
@@ -41,16 +41,14 @@ This leaderboard is based on the following three benchmarks.
 
 💻 Code: The Arena Elo ratings are computed by this [notebook]({notebook_url}). The MT-bench scores (single-answer grading on a scale of 10) are computed by [fastchat.llm_judge](https://github.com/lm-sys/FastChat/tree/main/fastchat/llm_judge). The MMLU scores are mostly computed by [InstructEval](https://github.com/declare-lab/instruct-eval). Higher values are better for all benchmarks. Empty cells mean not available. Last updated: November, 2023.
 """
-    return leaderboard_md
 
 
 def make_leaderboard_md_live(elo_results):
-    leaderboard_md = f"""
+    return f"""
 # Leaderboard
 Last updated: {elo_results["last_updated_datetime"]}
 {elo_results["leaderboard_table"]}
 """
-    return leaderboard_md
 
 
 def update_elo_components(max_num_files, elo_results_file):
@@ -115,29 +113,17 @@ def load_leaderboard_table_csv(filename, add_hyperlink=True):
     rows = []
     for i in range(1, len(lines)):
         row = [v.strip() for v in lines[i].split(",")]
-        for j in range(len(heads)):
+        for head in heads:
             item = {}
             for h, v in zip(heads, row):
                 if h == "Arena Elo rating":
-                    if v != "-":
-                        v = int(ast.literal_eval(v))
-                    else:
-                        v = np.nan
+                    v = int(ast.literal_eval(v)) if v != "-" else np.nan
                 elif h == "MMLU":
-                    if v != "-":
-                        v = round(ast.literal_eval(v) * 100, 1)
-                    else:
-                        v = np.nan
-                elif h == "MT-bench (win rate %)":
-                    if v != "-":
-                        v = round(ast.literal_eval(v[:-1]), 1)
-                    else:
-                        v = np.nan
+                    v = round(ast.literal_eval(v) * 100, 1) if v != "-" else np.nan
                 elif h == "MT-bench (score)":
-                    if v != "-":
-                        v = round(ast.literal_eval(v), 2)
-                    else:
-                        v = np.nan
+                    v = round(ast.literal_eval(v), 2) if v != "-" else np.nan
+                elif h == "MT-bench (win rate %)":
+                    v = round(ast.literal_eval(v[:-1]), 1) if v != "-" else np.nan
                 item[h] = v
             if add_hyperlink:
                 item["Model"] = model_hyperlink(item["Model"], item["Link"])
@@ -200,8 +186,8 @@ def build_leaderboard_tab(elo_results_file, leaderboard_table_file):
             values.append(row)
         values.sort(key=lambda x: -x[1] if not np.isnan(x[1]) else 1e9)
 
-        headers[1] = "⭐ " + headers[1]
-        headers[2] = "📈 " + headers[2]
+        headers[1] = f"⭐ {headers[1]}"
+        headers[2] = f"📈 {headers[2]}"
 
         gr.Dataframe(
             headers=headers,
@@ -215,9 +201,6 @@ def build_leaderboard_tab(elo_results_file, leaderboard_table_file):
             """,
             elem_id="leaderboard_markdown",
         )
-    else:
-        pass
-
     leader_component_values[:] = [md, p1, p2, p3, p4]
 
     """

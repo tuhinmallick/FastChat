@@ -29,7 +29,7 @@ if __name__ == "__main__":
     model = args.model
 
     cluster_infos = pickle.load(open(args.input_file, "rb"))
-    num_total_prompts = sum([x[0] for x in cluster_infos])
+    num_total_prompts = sum(x[0] for x in cluster_infos)
 
     topics = []
     percentages = []

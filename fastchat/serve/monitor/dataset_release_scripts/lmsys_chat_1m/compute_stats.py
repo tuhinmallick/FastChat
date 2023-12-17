@@ -69,10 +69,9 @@ chat_dates = [
 
 
 def to_remove(x):
-    for d in ["08-09", "08-08", "08-07", "08-06", "08-05", "08-04"]:
-        if d in x:
-            return True
-    return False
+    return any(
+        d in x for d in ["08-09", "08-08", "08-07", "08-06", "08-05", "08-04"]
+    )
 
 
 chat_dates = [x for x in chat_dates if not to_remove(x)]
